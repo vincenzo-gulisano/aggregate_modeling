@@ -6,7 +6,6 @@ from pyflink.datastream.connectors.file_system import FileSource, StreamFormat, 
 from pyflink.datastream.functions import AggregateFunction
 
 
-
 # -------------------- Define Custom Aggregate Function --------------------
 class MyAggregateFunction(AggregateFunction):
     """An aggregate function that stores all tuples and computes the average only when get_result is called."""
@@ -38,24 +37,30 @@ def run_flink_job(input_file, output_file):
     env.set_parallelism(1)  # Ensures deterministic results for debugging
 
     # Define Source
-    input_format = TextInputFormat(input_file)
-    input_format.set_charset("UTF-8")
-    source = env.read_file(input_format, input_file, line_delimiter="\n", type_info=Types.STRING())
+    source = env.from_source(
+        FileSource.for_record_stream_format(
+            StreamFormat.text_line_format(), input_file
+        ).build(), WatermarkStrategy.no_watermarks(), "FileSource")
 
     # Parse CSV lines into tuples (event_time, id, value)
+
     def parse_line(line):
         parts = line.split(",")
-        return int(parts[0]), int(parts[1]), float(parts[2])  # (event_time, id, value)
+        # (event_time, id, value)
+        return int(parts[0]), int(parts[1]), float(parts[2])
 
-    parsed_stream = source.map(parse_line, output_type=Types.TUPLE([Types.LONG(), Types.INT(), Types.FLOAT()]))
+    parsed_stream = source.map(parse_line, output_type=Types.TUPLE(
+        [Types.LONG(), Types.INT(), Types.FLOAT()]))
 
     # Define Watermark Strategy (monotonically increasing timestamps)
     watermark_strategy = WatermarkStrategy.for_monotonous_timestamps().with_timestamp_assigner(
-        lambda event, timestamp: event[0]  # Assigns event_time as the timestamp
+        # Assigns event_time as the timestamp
+        lambda event, timestamp: event[0]
     )
 
     # Apply Watermark Strategy
-    timestamped_stream = parsed_stream.assign_timestamps_and_watermarks(watermark_strategy)
+    timestamped_stream = parsed_stream.assign_timestamps_and_watermarks(
+        watermark_strategy)
 
     # Apply Sliding Window Aggregation (Window size = 1 min, slide = 20 sec)
     aggregated_stream = timestamped_stream \
@@ -68,10 +73,12 @@ def run_flink_job(input_file, output_file):
         output_file,
         SimpleStringEncoder()
     ).with_output_file_config(
-        OutputFileConfig.builder().with_part_prefix("output").with_part_suffix(".txt").build()
+        OutputFileConfig.builder().with_part_prefix(
+            "output").with_part_suffix(".txt").build()
     ).build()
 
-    aggregated_stream.map(lambda x: str(x), output_type=Types.STRING()).sink_to(sink)
+    aggregated_stream.map(lambda x: str(
+        x), output_type=Types.STRING()).sink_to(sink)
 
     # Execute Flink Job
     env.execute("Flink Python Sliding Window Aggregate Job")

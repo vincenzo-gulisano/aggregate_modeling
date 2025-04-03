@@ -1,10 +1,16 @@
 import os
 import sys
-from pyflink.common import WatermarkStrategy, Encoder, Types
+from pyflink.common import WatermarkStrategy, Encoder, Types, Time
 from pyflink.datastream import StreamExecutionEnvironment, RuntimeExecutionMode
 from pyflink.datastream.connectors.file_system import FileSource, StreamFormat, FileSink, OutputFileConfig, RollingPolicy
 from pyflink.datastream.functions import AggregateFunction
+from pyflink.common.watermark_strategy import TimestampAssigner
+from pyflink.datastream.window import SlidingEventTimeWindows
 
+# -------------------- Define EventTimestampAssigner --------------------
+class EventTimestampAssigner(TimestampAssigner):
+    def extract_timestamp(self, event, record_timestamp):
+        return event[0]  # Extract event_time as timestamp
 
 # -------------------- Define Custom Aggregate Function --------------------
 class MyAggregateFunction(AggregateFunction):
@@ -54,8 +60,7 @@ def run_flink_job(input_file, output_file):
 
     # Define Watermark Strategy (monotonically increasing timestamps)
     watermark_strategy = WatermarkStrategy.for_monotonous_timestamps().with_timestamp_assigner(
-        # Assigns event_time as the timestamp
-        lambda event, timestamp: event[0]
+        EventTimestampAssigner()
     )
 
     # Apply Watermark Strategy

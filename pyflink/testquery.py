@@ -22,7 +22,7 @@ class MyAggregateFunction(AggregateFunction):
         return {"values": []}
 
     def add(self, value, accumulator):
-        print(f"Adding value={value[2]} from tuple={value} to accumulator.")
+        # print(f"Adding value={value[2]} from tuple={value} to accumulator.")
         """Adds a value to the state (accumulator)."""
         accumulator["values"].append(value[2])
         return accumulator
@@ -75,14 +75,17 @@ def run_flink_job(input_file, output_file):
         .window(SlidingEventTimeWindows.of(Time.minutes(1), Time.seconds(20))) \
         .aggregate(MyAggregateFunction(), output_type=Types.FLOAT())
 
+    # Set output file config to use exact file name
+    output_file_config = OutputFileConfig.builder() \
+        .with_part_prefix("output") \
+        .with_part_suffix(".txt") \
+        .build()
+
     # Define Sink (File Sink)
     sink = FileSink.for_row_format(
         output_file,
         Encoder.simple_string_encoder()
-    ).with_output_file_config(
-        OutputFileConfig.builder().with_part_prefix(
-            "output").with_part_suffix(".txt").build()
-    ).build()
+    ).with_output_file_config(output_file_config).build()
 
     aggregated_stream.map(lambda x: str(
         x), output_type=Types.STRING()).sink_to(sink)

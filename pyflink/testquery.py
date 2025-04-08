@@ -6,6 +6,7 @@ from pyflink.datastream.connectors.file_system import FileSource, StreamFormat, 
 from pyflink.datastream.functions import AggregateFunction
 from pyflink.common.watermark_strategy import TimestampAssigner
 from pyflink.datastream.window import SlidingEventTimeWindows
+import argparse
 
 # -------------------- Define EventTimestampAssigner --------------------
 class EventTimestampAssigner(TimestampAssigner):
@@ -21,8 +22,9 @@ class MyAggregateFunction(AggregateFunction):
         return {"values": []}
 
     def add(self, value, accumulator):
+        print(f"Adding value={value[2]} from tuple={value} to accumulator.")
         """Adds a value to the state (accumulator)."""
-        accumulator["values"].append(value)
+        accumulator["values"].append(value[2])
         return accumulator
 
     def get_result(self, accumulator):
@@ -91,9 +93,14 @@ def run_flink_job(input_file, output_file):
 
 # -------------------- Run the Application --------------------
 if __name__ == "__main__":
-    # File paths (modify as needed)
-    input_csv_path = "input.csv"  # Provide the path to the input CSV file
-    output_csv_path = "output.txt"  # Output file path
 
-    # Run Flink job
+    parser = argparse.ArgumentParser(description="Run PyFlink aggregate job on CSV input.")
+    parser.add_argument("--input", "-i", required=True, help="Path to the input CSV file")
+    parser.add_argument("--output", "-o", required=True, help="Path to the output file")
+
+    args = parser.parse_args()
+
+    input_csv_path = args.input
+    output_csv_path = args.output
+
     run_flink_job(input_csv_path, output_csv_path)

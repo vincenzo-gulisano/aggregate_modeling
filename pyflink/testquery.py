@@ -76,7 +76,7 @@ def run_flink_job(input_file, output_file):
     # Define Sink (File Sink)
     sink = FileSink.for_row_format(
         output_file,
-        SimpleStringEncoder()
+        Encoder.simple_string_encoder()
     ).with_output_file_config(
         OutputFileConfig.builder().with_part_prefix(
             "output").with_part_suffix(".txt").build()

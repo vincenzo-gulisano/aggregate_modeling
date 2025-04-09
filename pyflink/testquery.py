@@ -12,6 +12,29 @@ from pyflink.common import Row
 from StatMonitor import StatMonitor
 from pyflink.datastream import MapFunction
 
+
+# Creating this one has global to share it with all the window instances.
+# Notice the parallelism is one, so there should be no problem when it comes 
+# to concurrent accessess
+wins_monitor_global = None
+
+def init_stat_monitor(path):
+    if StatMonitor.get_singleton() is None:
+        monitor = StatMonitor(
+            csv_path=path,
+            reset_value=0,
+            stat_type="SUM",
+            reporting_type="CUMULATIVE"
+        )
+        StatMonitor.set_singleton(monitor)
+
+        
+def close_stat_monitor():
+    monitor = StatMonitor.get_singleton()
+    if monitor:
+        monitor.close()
+        StatMonitor.set_singleton(None)
+        
 # -------------------- For throughput monitoring ------------------------
 class StatMonitorMapFunction(MapFunction):
     def __init__(self, stat_monitor):
@@ -19,7 +42,7 @@ class StatMonitorMapFunction(MapFunction):
 
     def map(self, value):
         # Report the value to StatMonitor
-        self.stat_monitor.report(1)
+        # self.stat_monitor.report(1)
         return value
 
     def close(self):
@@ -46,16 +69,27 @@ class MyAggregateFunction(AggregateFunction):
 
     def create_accumulator(self):
         """Creates a new accumulator which stores all values."""
+        
+        # Update window statistics
+        monitor = StatMonitor.get_singleton()
+        if monitor:
+            monitor.report(1)
+                
         return {"values": []}
 
     def add(self, value, accumulator):
-        # print(f"Adding value={value[2]} from tuple={value} to accumulator.")
         """Adds a value to the state (accumulator)."""
         accumulator["values"].append(value[2])
         return accumulator
 
     def get_result(self, accumulator):
         """Computes the average only when needed."""
+        
+        # Update window statistics
+        monitor = StatMonitor.get_singleton()
+        if monitor:
+            monitor.report(-1)
+                
         if len(accumulator["values"]) == 0:
             return 0  # Avoid division by zero
         return sum(accumulator["values"]) / len(accumulator["values"])
@@ -66,7 +100,11 @@ class MyAggregateFunction(AggregateFunction):
 
 
 # -------------------- Define Flink Job --------------------
-def run_flink_job(input_file, output_file, throughput_csv_path):
+def run_flink_job(input_file, output_file, throughput_csv_path, windows_csv_path):
+    
+    # Initialize the stat monitor ONCE globally
+    init_stat_monitor(windows_csv_path)
+
     # Create StreamExecutionEnvironment
     env = StreamExecutionEnvironment.get_execution_environment()
     env.set_parallelism(1)  # Ensures deterministic results for debugging
@@ -130,6 +168,9 @@ def run_flink_job(input_file, output_file, throughput_csv_path):
 
     # Execute Flink Job
     env.execute("Flink Python Sliding Window Aggregate Job")
+    
+    # Close the window stat monitor
+    close_stat_monitor()
 
 
 # -------------------- Run the Application --------------------
@@ -143,11 +184,14 @@ if __name__ == "__main__":
                         help="Path to the output file")
     parser.add_argument("--throughputStat", "-ts", required=True,
                         help="Path to the throughput stat file")
+    parser.add_argument("--winsStat", "-ws", required=True,
+                        help="Path to the windows stat file")
 
     args = parser.parse_args()
 
     input_csv_path = args.input
     output_csv_path = args.output
     throughput_csv_path = args.throughputStat
+    windows_csv_path = args.winsStat
 
-    run_flink_job(input_csv_path, output_csv_path, throughput_csv_path)
+    run_flink_job(input_csv_path, output_csv_path, throughput_csv_path, windows_csv_path)

@@ -14,6 +14,18 @@ class ReportingType(Enum):
 
 
 class StatMonitor:
+    
+    _singleton_instance = None
+
+    @classmethod
+    def get_singleton(cls):
+        return cls._singleton_instance
+
+    @classmethod
+    def set_singleton(cls, monitor):
+        cls._singleton_instance = monitor
+
+
     def __init__(self, csv_path, reset_value, stat_type, reporting_type, default_value=-1):
         self.csv_path = csv_path
         self.reset_value = reset_value
@@ -70,8 +82,10 @@ class StatMonitor:
             self.v = value
 
     def close(self):
+
         if self.file:
             self.log(all_timestamps=True)
             self.file.flush()
             self.file.close()
             self.file = None
+            

@@ -7,13 +7,26 @@ from pyflink.datastream.functions import AggregateFunction
 from pyflink.common.watermark_strategy import TimestampAssigner
 from pyflink.datastream.window import SlidingEventTimeWindows
 import argparse
+from pyflink.datastream.functions import ProcessWindowFunction
+from pyflink.common import Row
 
 # -------------------- Define EventTimestampAssigner --------------------
+
+
 class EventTimestampAssigner(TimestampAssigner):
     def extract_timestamp(self, event, record_timestamp):
         return event[0]  # Extract event_time as timestamp
 
+
+# -------------------- To be able to output timestamp and key too --------------------
+class MyProcessWindowFunction(ProcessWindowFunction):
+    def process(self, key, context, aggregates):
+        window_end = context.window().end
+        return [(window_end, key, agg) for agg in aggregates]
+
 # -------------------- Define Custom Aggregate Function --------------------
+
+
 class MyAggregateFunction(AggregateFunction):
     """An aggregate function that stores all tuples and computes the average only when get_result is called."""
 
@@ -73,7 +86,8 @@ def run_flink_job(input_file, output_file):
     aggregated_stream = timestamped_stream \
         .key_by(lambda x: x[1]) \
         .window(SlidingEventTimeWindows.of(Time.minutes(1), Time.seconds(20))) \
-        .aggregate(MyAggregateFunction(), output_type=Types.FLOAT())
+        .aggregate(MyAggregateFunction(), MyProcessWindowFunction(), output_type=Types.TUPLE([Types.LONG(), Types.INT(), Types.FLOAT()])
+                   )
 
     # Set output file config to use exact file name
     output_file_config = OutputFileConfig.builder() \
@@ -87,8 +101,8 @@ def run_flink_job(input_file, output_file):
         Encoder.simple_string_encoder()
     ).with_output_file_config(output_file_config).build()
 
-    aggregated_stream.map(lambda x: str(
-        x), output_type=Types.STRING()).sink_to(sink)
+    aggregated_stream.map(
+        lambda x: f"{x[0]},{x[1]},{x[2]}", output_type=Types.STRING()).sink_to(sink)
 
     # Execute Flink Job
     env.execute("Flink Python Sliding Window Aggregate Job")
@@ -97,9 +111,12 @@ def run_flink_job(input_file, output_file):
 # -------------------- Run the Application --------------------
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(description="Run PyFlink aggregate job on CSV input.")
-    parser.add_argument("--input", "-i", required=True, help="Path to the input CSV file")
-    parser.add_argument("--output", "-o", required=True, help="Path to the output file")
+    parser = argparse.ArgumentParser(
+        description="Run PyFlink aggregate job on CSV input.")
+    parser.add_argument("--input", "-i", required=True,
+                        help="Path to the input CSV file")
+    parser.add_argument("--output", "-o", required=True,
+                        help="Path to the output file")
 
     args = parser.parse_args()
 

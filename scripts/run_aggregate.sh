@@ -5,8 +5,10 @@ INPUT_FILE="/home/vincenzo/aggregate_modeling/data/tests/input.csv"
 OUTPUT_DIR="/home/vincenzo/aggregate_modeling/data/tests/output"
 FINAL_FILE="/home/vincenzo/aggregate_modeling/data/tests/output.txt"
 
+THROUGHPUT_FILE="/home/vincenzo/aggregate_modeling/data/tests/throughput.csv"
+
 # Run python
-python pyflink/testquery.py --input ${INPUT_FILE} --output ${OUTPUT_DIR}
+python pyflink/testquery.py --input ${INPUT_FILE} --output ${OUTPUT_DIR} --throughputStat ${THROUGHPUT_FILE}
 
 # The next is not the most elegant, but since the sink in PyFlink creates multiple files I am fixing this manually
 

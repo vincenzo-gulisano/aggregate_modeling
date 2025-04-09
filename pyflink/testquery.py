@@ -9,10 +9,24 @@ from pyflink.datastream.window import SlidingEventTimeWindows
 import argparse
 from pyflink.datastream.functions import ProcessWindowFunction
 from pyflink.common import Row
+from StatMonitor import StatMonitor
+from pyflink.datastream import MapFunction
+
+# -------------------- For throughput monitoring ------------------------
+class StatMonitorMapFunction(MapFunction):
+    def __init__(self, stat_monitor):
+        self.stat_monitor = stat_monitor
+
+    def map(self, value):
+        # Report the value to StatMonitor
+        self.stat_monitor.report(1)
+        return value
+
+    def close(self):
+        # Call StatMonitor's close method when the map function is closed
+        self.stat_monitor.close()
 
 # -------------------- Define EventTimestampAssigner --------------------
-
-
 class EventTimestampAssigner(TimestampAssigner):
     def extract_timestamp(self, event, record_timestamp):
         return event[0]  # Extract event_time as timestamp
@@ -52,7 +66,7 @@ class MyAggregateFunction(AggregateFunction):
 
 
 # -------------------- Define Flink Job --------------------
-def run_flink_job(input_file, output_file):
+def run_flink_job(input_file, output_file, throughput_csv_path):
     # Create StreamExecutionEnvironment
     env = StreamExecutionEnvironment.get_execution_environment()
     env.set_parallelism(1)  # Ensures deterministic results for debugging
@@ -62,6 +76,16 @@ def run_flink_job(input_file, output_file):
         FileSource.for_record_stream_format(
             StreamFormat.text_line_format(), input_file
         ).build(), WatermarkStrategy.no_watermarks(), "FileSource")
+
+    # Initialize StatMonitor for throughput
+    stat_monitor_throughput = StatMonitor(
+        throughput_csv_path, reset_value=0, stat_type="SUM", reporting_type="RESET")
+
+    # Inject stat reporting after source
+    source = source.map(
+        StatMonitorMapFunction(stat_monitor_throughput),
+        output_type=Types.STRING()
+    )
 
     # Parse CSV lines into tuples (event_time, id, value)
 
@@ -117,10 +141,13 @@ if __name__ == "__main__":
                         help="Path to the input CSV file")
     parser.add_argument("--output", "-o", required=True,
                         help="Path to the output file")
+    parser.add_argument("--throughputStat", "-ts", required=True,
+                        help="Path to the throughput stat file")
 
     args = parser.parse_args()
 
     input_csv_path = args.input
     output_csv_path = args.output
+    throughput_csv_path = args.throughputStat
 
-    run_flink_job(input_csv_path, output_csv_path)
+    run_flink_job(input_csv_path, output_csv_path, throughput_csv_path)

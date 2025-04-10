@@ -11,6 +11,7 @@ from pyflink.datastream.functions import ProcessWindowFunction
 from pyflink.common import Row
 from StatMonitor import StatMonitor
 from pyflink.datastream import MapFunction
+import time  # Import time module for introducing delays
 
 
 # Creating this one has global to share it with all the window instances.
@@ -99,6 +100,12 @@ class MyAggregateFunction(AggregateFunction):
         raise RuntimeError("Merge function should not be called!")
 
 
+# -------------------- Define precise delay function --------------------
+def precise_delay(target_time):
+    """Spin-wait until the target time is reached."""
+    while time.perf_counter() < target_time:
+        pass
+
 # -------------------- Define Flink Job --------------------
 def run_flink_job(input_file, output_file, throughput_csv_path, windows_csv_path):
     
@@ -125,12 +132,31 @@ def run_flink_job(input_file, output_file, throughput_csv_path, windows_csv_path
         output_type=Types.STRING()
     )
 
-    # Parse CSV lines into tuples (event_time, id, value)
+    # Parse CSV lines into tuples (event_time, id, value) with delay
+    def parse_line_with_delay():
+        previous_event_time = None
+        start_time = time.perf_counter()
 
-    def parse_line(line):
-        parts = line.split(",")
-        # (event_time, id, value)
-        return int(parts[0]), int(parts[1]), float(parts[2])
+        def parse_line(line):
+            nonlocal previous_event_time, start_time
+            parts = line.split(",")
+            event_time = int(parts[0])  # Extract event_time
+            key = int(parts[1])
+            value = float(parts[2])
+
+            # Calculate the delay based on event timestamps
+            if previous_event_time is not None:
+                delay = (event_time - previous_event_time) / 1000.0  # Convert ms to seconds
+                target_time = start_time + delay
+                precise_delay(target_time)
+                start_time = time.perf_counter()  # Reset start time after delay
+
+            previous_event_time = event_time
+            return event_time, key, value
+
+        return parse_line
+
+    parse_line = parse_line_with_delay()
 
     parsed_stream = source.map(parse_line, output_type=Types.TUPLE(
         [Types.LONG(), Types.INT(), Types.FLOAT()]))

@@ -42,7 +42,7 @@ class StatMonitorMapFunction(MapFunction):
 
     def map(self, value):
         # Report the value to StatMonitor
-        # self.stat_monitor.report(1)
+        self.stat_monitor.report(1)
         return value
 
     def close(self):

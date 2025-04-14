@@ -32,7 +32,7 @@ class ThreadIdLogger:
         with self.lock:  # Acquire the lock before entering the critical section
             # Open file if not already open
             self._open_file()
-            print(f"Writing to file: {self.csv_path} with id: {id} and name: {name}")
+            # print(f"Writing to file: {self.csv_path} with id: {id} and name: {name}")
             self.writer.writerow([id, name])
             self.file.flush()
 

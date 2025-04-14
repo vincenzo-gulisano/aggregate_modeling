@@ -21,11 +21,11 @@ def monitor_threads(pid, output_dir, interval=1):
         thread_monitors = {}
         # previous_cpu_times = {}
 
-        # Print threads information
-        threads = process.threads()
-        print(f"Threads in process {pid}:")
-        for thread in threads:
-            print(f"Thread info: {thread}")
+        # # Print threads information
+        # threads = process.threads()
+        # print(f"Threads in process {pid}:")
+        # for thread in threads:
+        #     print(f"Thread info: {thread}")
     
         while True:
             # Get all threads in the process

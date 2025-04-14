@@ -50,8 +50,7 @@ class SyntheticCSVGenerator:
                     stats_writer.writerow([sec, tuples_created])
 
             print(f"Done. Output written to {self.output_path}")
-            if self.stats_path:
-                print(f"Injection rate stats written to {self.stats_path}")
+            print(f"Injection rate stats written to {self.stats_path}")
         except IOError as e:
             print(f"Error writing to file: {e}")
             return

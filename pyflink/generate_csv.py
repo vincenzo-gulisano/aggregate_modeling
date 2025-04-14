@@ -25,8 +25,8 @@ class SyntheticCSVGenerator:
         total_tuples = self.duration_sec * self.rate_per_sec
         print(f"Generating {total_tuples} tuples...")
 
-        # Start timestamp = now in milliseconds
-        start_ts_ms = int(time.time() * 1000)
+        # Start timestamp = now in milliseconds, rounded to the nearest second
+        start_ts_ms = round(time.time()) * 1000
         try:
             with open(self.output_path, mode='w', newline='') as f, \
                  open(self.stats_path, mode='w', newline='') as stats_f:
@@ -39,6 +39,8 @@ class SyntheticCSVGenerator:
                     # Generate `rate_per_sec` timestamps spread across this second
                     offsets = sorted(int(random.expovariate(1.5) * 1000) % 1000 for _ in range(self.rate_per_sec))
                     tuples_created = 0
+                    
+                    print(f"Generating {len(offsets)} tuples for second {sec + 1}/{self.duration_sec}...")
 
                     for offset in offsets:
                         event_time = base_ts + offset

@@ -146,6 +146,7 @@ class LineParserWithDelay:
     def __init__(self):
         self.previous_event_time = None
         self.thread_reported = False
+        print(f"LineParser init with thread_reported: {self.thread_reported}")
         self.start_time = time.perf_counter()
 
     def parse_line(self, line):
@@ -157,7 +158,8 @@ class LineParserWithDelay:
             # Update window statistics
             thread_id_logger = ThreadIdLogger.get_singleton()
             if thread_id_logger:
-                thread_id_logger.report(thread_id, "aggregate")
+                print("LineParser reporting line_parser to thread_id_logger")
+                thread_id_logger.report(thread_id, "line_parser")
             self.thread_reported = True
             
         parts = line.split(",")
@@ -168,13 +170,44 @@ class LineParserWithDelay:
         # Calculate the delay based on event timestamps
         if self.previous_event_time is not None:
             delay = (event_time - self.previous_event_time) / 1000.0  # Convert ms to seconds
+            # print(f"Delay: {delay} seconds")
             target_time = self.start_time + delay
             precise_delay(target_time)
             self.start_time = time.perf_counter()  # Reset start time after delay
 
         self.previous_event_time = event_time
         return event_time, key, value
+    
+# ----------------------------------------------------------
 
+class AggregatedStreamFormatter:
+    def __init__(self):
+        # self.sink = sink
+        self.thread_reported = False
+        print(f"AggregatedStreamFormatter init with thread_reported: {self.thread_reported}")
+
+    def format_record(self, record):
+        
+        # Report the thread ID
+        if not self.thread_reported:
+            # Get the native Thread ID (TID)
+            thread_id = threading.get_native_id()
+            # Update window statistics
+            thread_id_logger = ThreadIdLogger.get_singleton()
+            if thread_id_logger:
+                print("AggregatedStreamFormatter reporting line_parser to sink_formatter")
+                thread_id_logger.report(thread_id, "sink_formatter")
+            self.thread_reported = True
+            
+        """Format a record as a comma-separated string."""
+        return f"{record[0]},{record[1]},{record[2]}"
+
+    def format_and_sink(self, aggregated_stream, sink):
+        
+        """Format the aggregated stream and sink it to the specified sink."""
+        aggregated_stream.map(
+            self.format_record, output_type=Types.STRING()
+        ).sink_to(sink).disable_chaining()  # Disable chaining for this operator
 # -------------------- Define Flink Job --------------------
 def run_flink_job(input_file, output_folder):
     """
@@ -218,7 +251,8 @@ def run_flink_job(input_file, output_folder):
     line_parser = LineParserWithDelay()
 
     parsed_stream = source.map(line_parser.parse_line, output_type=Types.TUPLE(
-        [Types.LONG(), Types.INT(), Types.FLOAT()]))
+        [Types.LONG(), Types.INT(), Types.FLOAT()]
+    ))
 
     # Define Watermark Strategy (monotonically increasing timestamps)
     watermark_strategy = WatermarkStrategy.for_monotonous_timestamps().with_timestamp_assigner(
@@ -227,14 +261,15 @@ def run_flink_job(input_file, output_folder):
 
     # Apply Watermark Strategy
     timestamped_stream = parsed_stream.assign_timestamps_and_watermarks(
-        watermark_strategy)
+        watermark_strategy
+    )
 
     # Apply Sliding Window Aggregation (Window size = 1 min, slide = 20 sec)
     aggregated_stream = timestamped_stream \
         .key_by(lambda x: x[1]) \
         .window(SlidingEventTimeWindows.of(Time.seconds(10), Time.seconds(5))) \
         .aggregate(MyAggregateFunction(), MyProcessWindowFunction(), output_type=Types.TUPLE([Types.LONG(), Types.INT(), Types.FLOAT()])
-                   )
+                   ).disable_chaining()  # Disable chaining for this operator
 
     # Set output file config to use exact file name
     output_file_config = OutputFileConfig.builder() \
@@ -248,8 +283,9 @@ def run_flink_job(input_file, output_folder):
         Encoder.simple_string_encoder()
     ).with_output_file_config(output_file_config).build()
 
-    aggregated_stream.map(
-        lambda x: f"{x[0]},{x[1]},{x[2]}", output_type=Types.STRING()).sink_to(sink)
+    # Use the AggregatedStreamFormatter class
+    formatter = AggregatedStreamFormatter()
+    formatter.format_and_sink(aggregated_stream, sink)
 
     # Execute Flink Job
     env.execute("Flink Python Sliding Window Aggregate Job")

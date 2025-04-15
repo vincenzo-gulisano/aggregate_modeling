@@ -8,7 +8,7 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "args": "--input /home/vincenzo/aggregate_modeling/data/tests/input.csv --output /home/vincenzo/aggregate_modeling/data/tests/output.txt"
+            "args": "--input /home/vincenzo/aggregate_modeling/data/tests/input.csv --output_folder /home/vincenzo/aggregate_modeling/data/tests"
         }
     ]
 }

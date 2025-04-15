@@ -140,9 +140,42 @@ def precise_delay(target_time):
     while time.perf_counter() < target_time:
         pass
 
+# ----------------------------------------------------------
+
+class LineParserWithDelay:
+    def __init__(self):
+        self.previous_event_time = None
+        self.thread_reported = False
+        self.start_time = time.perf_counter()
+
+    def parse_line(self, line):
+        
+        # Report the thread ID
+        if not self.thread_reported:
+            # Get the native Thread ID (TID)
+            thread_id = threading.get_native_id()
+            # Update window statistics
+            thread_id_logger = ThreadIdLogger.get_singleton()
+            if thread_id_logger:
+                thread_id_logger.report(thread_id, "aggregate")
+            self.thread_reported = True
+            
+        parts = line.split(",")
+        event_time = int(parts[0])  # Extract event_time
+        key = int(parts[1])
+        value = float(parts[2])
+
+        # Calculate the delay based on event timestamps
+        if self.previous_event_time is not None:
+            delay = (event_time - self.previous_event_time) / 1000.0  # Convert ms to seconds
+            target_time = self.start_time + delay
+            precise_delay(target_time)
+            self.start_time = time.perf_counter()  # Reset start time after delay
+
+        self.previous_event_time = event_time
+        return event_time, key, value
+
 # -------------------- Define Flink Job --------------------
-
-
 def run_flink_job(input_file, output_folder):
     """
     Run the Flink job with the specified input file and output folder.
@@ -181,34 +214,10 @@ def run_flink_job(input_file, output_folder):
         output_type=Types.STRING()
     )
 
-    # Parse CSV lines into tuples (event_time, id, value) with delay
-    def parse_line_with_delay():
-        previous_event_time = None
-        start_time = time.perf_counter()
+    # Instantiate the parser class
+    line_parser = LineParserWithDelay()
 
-        def parse_line(line):
-            nonlocal previous_event_time, start_time
-            parts = line.split(",")
-            event_time = int(parts[0])  # Extract event_time
-            key = int(parts[1])
-            value = float(parts[2])
-
-            # Calculate the delay based on event timestamps
-            if previous_event_time is not None:
-                delay = (event_time - previous_event_time) / \
-                    1000.0  # Convert ms to seconds
-                target_time = start_time + delay
-                precise_delay(target_time)
-                start_time = time.perf_counter()  # Reset start time after delay
-
-            previous_event_time = event_time
-            return event_time, key, value
-
-        return parse_line
-
-    parse_line = parse_line_with_delay()
-
-    parsed_stream = source.map(parse_line, output_type=Types.TUPLE(
+    parsed_stream = source.map(line_parser.parse_line, output_type=Types.TUPLE(
         [Types.LONG(), Types.INT(), Types.FLOAT()]))
 
     # Define Watermark Strategy (monotonically increasing timestamps)

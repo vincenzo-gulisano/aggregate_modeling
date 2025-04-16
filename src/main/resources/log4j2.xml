@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Appenders>
+        <!-- Console Appender -->
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{HH:mm:ss.SSS} %-5level %logger{1} - %msg%n" />
+        </Console>
+    </Appenders>
+    <Loggers>
+        <!-- Loggers Configuration -->
+        <Root level="error">
+            <AppenderRef ref="Console" />
+        </Root>
+        
+        <!-- Log debug messages for a specific class -->
+        <Logger name="com.vincenzogulisano.usecases.linearroad.QueryCountConsecutiveStops" level="debug" additivity="false" includeLocation="true">
+            <AppenderRef ref="Console" />
+        </Logger>
+        <Logger name="com.vincenzogulisano.usecases.synthetic.QuerySynthetic" level="debug" additivity="false" includeLocation="true">
+            <AppenderRef ref="Console" />
+        </Logger>
+        <Logger name="com.vincenzogulisano.usecases.linearroad.SinkLogAndLatency" level="debug" additivity="false" includeLocation="true">
+            <AppenderRef ref="Console" />
+        </Logger>
+        <Logger name="com.vincenzogulisano.usecases.linearroad.SourceReadFromFile" level="debug" additivity="false" includeLocation="true">
+            <AppenderRef ref="Console" />
+        </Logger>
+        <Logger name="com.vincenzogulisano.util.ThreadCPUMonitor" level="debug" additivity="false" includeLocation="true">
+            <AppenderRef ref="Console" />
+        </Logger>
+        <Logger name="com.vincenzogulisano.javapythoncommunicator.EnvironmentStateCalculator" level="debug" additivity="false" includeLocation="true">
+            <AppenderRef ref="Console" />
+        </Logger>
+        <Logger name="com.vincenzogulisano.usecases.linearroad.IRLRCPUMatrix_ESC" level="debug" additivity="false" includeLocation="true">
+            <AppenderRef ref="Console" />
+        </Logger>
+        <Logger name="com.vincenzogulisano.woost.WoostAggregateWithCompression" level="debug" additivity="false" includeLocation="true">
+            <AppenderRef ref="Console" />
+        </Logger>
+        <Logger name="com.vincenzogulisano.javapythoncommunicator.JPComm" level="debug" additivity="false" includeLocation="true">
+            <AppenderRef ref="Console" />
+        </Logger>
+        <Logger name="org.apache.kafka" level="WARN"/>
+    </Loggers>
+</Configuration>

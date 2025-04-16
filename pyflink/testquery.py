@@ -80,8 +80,9 @@ class EventTimestampAssigner(TimestampAssigner):
 # -------------------- To be able to output timestamp and key too --------------------
 class MyProcessWindowFunction(ProcessWindowFunction):
 
-    def __init__(self):
+    def __init__(self,stat_monitor):
         self.thread_reported = False
+        self.stat_monitor = stat_monitor
 
     def process(self, key, context, aggregates):
         if not self.thread_reported:
@@ -94,8 +95,16 @@ class MyProcessWindowFunction(ProcessWindowFunction):
             self.thread_reported = True
 
         window_end = context.window().end
+        
+        # Report output rate statistic
+        self.stat_monitor.report(len(aggregates))
+
         return [(window_end, key, agg) for agg in aggregates]
 
+    def close(self):
+        # Call StatMonitor's close method when the map function is closed
+        self.stat_monitor.close()
+        
 # -------------------- Define Custom Aggregate Function --------------------
 
 
@@ -142,6 +151,7 @@ def precise_delay(target_time):
 
 # ----------------------------------------------------------
 
+
 class LineParserWithDelay:
     def __init__(self):
         self.previous_event_time = None
@@ -158,13 +168,13 @@ class LineParserWithDelay:
         return state
 
     def __setstate__(self, state):
-        print("LineParser __setstate__")  
+        print("LineParser __setstate__")
         # Restore the state and reinitialize thread_reported
         self.__dict__.update(state)
         self.thread_reported = False
-        
+
     def parse_line(self, line):
-        
+
         # Report the thread ID
         if not self.thread_reported:
             # Get the native Thread ID (TID)
@@ -175,7 +185,7 @@ class LineParserWithDelay:
                 print("LineParser reporting line_parser to thread_id_logger")
                 thread_id_logger.report(thread_id, "line_parser")
             self.thread_reported = True
-            
+
         parts = line.split(",")
         event_time = int(parts[0])  # Extract event_time
         key = int(parts[1])
@@ -183,25 +193,30 @@ class LineParserWithDelay:
 
         # Calculate the delay based on event timestamps
         if self.previous_event_time is not None:
-            delay = (event_time - self.previous_event_time) / 1000.0  # Convert ms to seconds
+            delay = (event_time - self.previous_event_time) / \
+                1000.0  # Convert ms to seconds
             # print(f"Delay: {delay} seconds")
             target_time = self.start_time + delay
             precise_delay(target_time)
             self.start_time = time.perf_counter()  # Reset start time after delay
 
         self.previous_event_time = event_time
+
         return event_time, key, value
-    
+
+
 # ----------------------------------------------------------
+
 
 class AggregatedStreamFormatter:
     def __init__(self):
         # self.sink = sink
         self.thread_reported = False
-        print(f"AggregatedStreamFormatter init with thread_reported: {self.thread_reported}")
+        print(
+            f"AggregatedStreamFormatter init with thread_reported: {self.thread_reported}")
 
     def format_record(self, record):
-        
+
         # Report the thread ID
         if not self.thread_reported:
             # Get the native Thread ID (TID)
@@ -209,20 +224,23 @@ class AggregatedStreamFormatter:
             # Update window statistics
             thread_id_logger = ThreadIdLogger.get_singleton()
             if thread_id_logger:
-                print("AggregatedStreamFormatter reporting line_parser to sink_formatter")
+                print(
+                    "AggregatedStreamFormatter reporting line_parser to sink_formatter")
                 thread_id_logger.report(thread_id, "sink_formatter")
             self.thread_reported = True
-            
+
         """Format a record as a comma-separated string."""
         return f"{record[0]},{record[1]},{record[2]}"
 
     def format_and_sink(self, aggregated_stream, sink):
-        
         """Format the aggregated stream and sink it to the specified sink."""
         aggregated_stream.map(
             self.format_record, output_type=Types.STRING()
         ).sink_to(sink).disable_chaining()  # Disable chaining for this operator
+        
 # -------------------- Define Flink Job --------------------
+
+
 def run_flink_job(input_file, output_folder):
     """
     Run the Flink job with the specified input file and output folder.
@@ -236,6 +254,7 @@ def run_flink_job(input_file, output_folder):
     throughput_csv_path = os.path.join(output_folder, "throughput.csv")
     windows_csv_path = os.path.join(output_folder, "windows.csv")
     threads_ids_path = os.path.join(output_folder, "threads_ids.csv")
+    outputrate_csv_path = os.path.join(output_folder, "outputrate.csv")
 
     # Initialize the stat monitor ONCE globally
     init_stat_monitor(windows_csv_path)
@@ -278,11 +297,15 @@ def run_flink_job(input_file, output_folder):
         watermark_strategy
     )
 
+    # Initialize StatMonitor for throughput
+    stat_monitor_outputrate = StatMonitor(
+        outputrate_csv_path, reset_value=0, stat_type="SUM", reporting_type="RESET")
+
     # Apply Sliding Window Aggregation (Window size = 1 min, slide = 20 sec)
     aggregated_stream = timestamped_stream \
         .key_by(lambda x: x[1]) \
         .window(SlidingEventTimeWindows.of(Time.seconds(10), Time.seconds(5))) \
-        .aggregate(MyAggregateFunction(), MyProcessWindowFunction(), output_type=Types.TUPLE([Types.LONG(), Types.INT(), Types.FLOAT()])
+        .aggregate(MyAggregateFunction(), MyProcessWindowFunction(stat_monitor_outputrate), output_type=Types.TUPLE([Types.LONG(), Types.INT(), Types.FLOAT()])
                    ).disable_chaining()  # Disable chaining for this operator
 
     # Set output file config to use exact file name

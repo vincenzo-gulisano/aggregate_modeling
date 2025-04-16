@@ -149,6 +149,20 @@ class LineParserWithDelay:
         print(f"LineParser init with thread_reported: {self.thread_reported}")
         self.start_time = time.perf_counter()
 
+    def __getstate__(self):
+        print("LineParser __getstate__")
+        # Exclude thread_reported from being pickled
+        state = self.__dict__.copy()
+        if "thread_reported" in state:
+            del state["thread_reported"]
+        return state
+
+    def __setstate__(self, state):
+        print("LineParser __setstate__")  
+        # Restore the state and reinitialize thread_reported
+        self.__dict__.update(state)
+        self.thread_reported = False
+        
     def parse_line(self, line):
         
         # Report the thread ID
